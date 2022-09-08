@@ -60,16 +60,19 @@ func (s *Server) Handler(conn net.Conn) {
 	// fmt.Println("connection is connected")
 
 	// 得到新用户
-	user := CreateNewUser(conn)
+	user := CreateNewUser(conn, s)
 
-	// 用户上线广播通知
+	/*// 用户上线广播通知
 	s.mapLock.Lock() // 加锁，map是线程不安全的数据类型
 	// 将新用户添加到UserMap中
 	s.OnlineMap[user.Name] = user
 	s.mapLock.Unlock() // 添加完数据，解锁
 
 	// 向全服用户广播上线通知
-	s.BroadCast(user, "已上线")
+	s.BroadCast(user, "已上线")*/
+
+	// 用户上线
+	user.Online()
 
 	// 接收客户端发送的消息
 	go func() {
@@ -80,7 +83,9 @@ func (s *Server) Handler(conn net.Conn) {
 
 			// 排除错误
 			if n == 0 {
-				s.BroadCast(user, "已下线")
+				// s.BroadCast(user, "已下线")
+				// 用户下线
+				user.Offline()
 				return
 			}
 			if err != nil && err != io.EOF {
@@ -89,6 +94,10 @@ func (s *Server) Handler(conn net.Conn) {
 
 			// 提取用户消息
 			msg := string(buff[:n-1])
+
+			if user.MsgType(msg) {
+				continue
+			}
 
 			// 将得到的消息进行广播
 			s.BroadCast(user, msg)
