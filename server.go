@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -74,40 +76,60 @@ func (s *Server) Handler(conn net.Conn) {
 	// 用户上线
 	user.Online()
 
+	// 监听用户是否活跃的channel
+	isAlive := make(chan bool)
+
 	// 接收客户端发送的消息
 	go func() {
+		// 定义用户输入消息的接收容器
 		buff := make([]byte, 4096)
 		for {
 			// 读取消息
 			n, err := conn.Read(buff)
-
-			// 排除错误
+			// 用户下线
 			if n == 0 {
 				// s.BroadCast(user, "已下线")
 				// 用户下线
 				user.Offline()
 				return
 			}
+			// 未成功读取
 			if err != nil && err != io.EOF {
 				fmt.Println("Conn read err:", err)
 			}
-
 			// 提取用户消息
 			msg := string(buff[:n-1])
-
+			// 判断用户输入的是指令还是消息
 			if user.MsgType(msg) {
 				continue
 			}
-
 			// 将得到的消息进行广播
 			s.BroadCast(user, msg)
+			// 只要进入这里面就代表用户活跃
+			isAlive <- true
 
 		}
 	}()
 
-	// 保持handler不死
-	select {}
+	// 用户活跃检测
+	for {
+		select {
+		case <-isAlive:
+			// 说明当前用户是活跃的，需要更新定时器
+			// 不做任何事情，为了激活select，更新定时器
+		// 定时器记录用户 xx S不发言视作不活跃被强踢
+		case <-time.After(time.Second * 300):
+			// 向用户发送消息
+			user.SendMsg("因您长时间未活动，您已被踢出该服务器！")
+			// 销毁用户使用的资源
+			close(user.C)
+			// 关闭连接
+			conn.Close()
+			// 退出当前Handler
+			runtime.Goexit()
 
+		}
+	}
 }
 
 func (s *Server) BroadCast(user *User, msg string) {

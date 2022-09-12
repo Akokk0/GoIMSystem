@@ -43,13 +43,59 @@ func (u *User) MsgType(msg string) bool {
 
 // User CLI
 func (u *User) CMListener(cmd string) {
-	if cmd == "/who" {
+	// 获取用户输入的指令
+	command := strings.Split(cmd, " ")[0]
+	// 判断是哪一个指令
+	switch command {
+	// 查询当前所有在线用户
+	case "/who":
 		u.server.mapLock.Lock()
 		for _, user := range u.server.OnlineMap {
-			msg := "[" + user.Addr + "]" + user.Name + ":" + "在线..."
+			msg := "[" + user.Addr + "]" + user.Name + ":" + "在线...\n"
 			u.SendMsg(msg)
 		}
 		u.server.mapLock.Unlock()
+	// 重命名
+	case "/rename":
+		name := strings.Split(cmd, " ")[1]
+		// 判断之前是否存在该值
+		if _, ok := u.server.OnlineMap[name]; ok {
+			u.SendMsg("当前用户名被使用！\n")
+		} else {
+			// 不存在，可以使用该用户名
+			u.server.mapLock.Lock()
+			// 删除以前的值
+			delete(u.server.OnlineMap, u.Name)
+			// 把修改的用户名写入OnlineMap
+			u.server.OnlineMap[name] = u
+			u.server.mapLock.Unlock()
+			// 修改自己的用户名
+			u.Name = name
+			// 告诉客服端已更新用户名
+			u.SendMsg("您已更新用户名：" + name + "\n")
+
+		}
+	case "/to":
+		// 把输入的内容分段
+		msgList := strings.Split(cmd, " ")
+		// 获取发送人
+		who := msgList[1]
+		// 获取发送内容
+		content := msgList[2]
+		// 查询发送人是否存在或在线
+		receiver, ok := u.server.OnlineMap[who] // 获取发送人
+		if !ok {
+			// 发送人不存在或不在线
+			u.SendMsg("该用户不存在或不在线\n")
+			return
+		}
+		// 判断发送内容是否为空
+		if content == "" {
+			u.SendMsg("您发送的消息为空，请重新发送")
+			return
+		}
+		// 发送消息
+		receiver.SendMsg(u.Name + "对您说：" + content + "\n")
 	}
 }
 
